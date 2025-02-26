@@ -30,11 +30,77 @@ In this blog, I’ll walk you through the process of signing an OCI image and ve
 
 ## Tools & Setup
 The following tools and resources are used to follow along with this blog:
-- Docker – Installed and running.
-- Notation CLI – Installed for signing and verifying OCI images.
-- ORAS CLI – Installed for working with OCI artifacts.
-- Container Registry – A registry to store and manage signed images. In this blog, I use Azure Container Registry (ACR) with the endpoint `yoyoociacr.azurecr.io`
+1. Docker – Installed and running.
+2. Notation CLI – Installed for signing and verifying OCI images.
+3. ORAS CLI – Installed for working with OCI artifacts.
+4. Container Registry – A registry to store and manage signed images. In this blog, I use Azure Container Registry (ACR) with the endpoint `yoyoociacr.azurecr.io`
   ![acr resource screenshot](yoyoociacr-screenshot.png)
+5. OCI Image: A test OCI image pushed to the above container registry. 
+    ![pushed OCI image](/oci-image-screenshot.png)
+    <details>    
+    <summary>Click to expand to check the steps to create this image.</summary>
+    <pre>
+    a. Create a Local Directory
+    Create a directory named `oci-artifacts` and add two YAML files: `pod.yaml` and `kustomization.yaml`:
+    ```
+    oci-artifacts/
+    ├── pod.yaml
+    └── kustomization.yaml
+    ```
+
+    b. Define the pod.yaml File
+    ```yaml
+    apiVersion: v1
+      kind: Pod
+      metadata:
+        name: yoyo-pod
+      spec:
+        nodeSelector:
+        kubernetes.io/os: linux
+        containers:
+        - image: mcr.microsoft.com/mirror/docker/library/nginx:1.23
+        name: nginx-azuredisk
+        resources:
+          requests:
+          cpu: 100m
+          memory: 128Mi
+          limits:
+          cpu: 250m
+          memory: 256Mi
+    ```
+    {: file="pod.yaml" }
+
+    c. Define the kustomization.yaml File
+    ```yaml
+    apiVersion: kustomize.config.k8s.io/v1beta1
+    kind: Kustomization
+    resources:
+    - pod.yaml
+    ```
+    {: file="kustomization.yaml" }
+
+    d. Package the Artifacts
+    Navigate to the parent directory of oci-artifacts and create a tarball:
+    ```powershell
+    tar -czf oci-artifacts.tar.gz oci-artifacts/
+    ```
+
+    e. Use ORAS CLI to push the tarball to the Container Registry:
+    ```powershell
+    # Define registry variables
+    $REGISTRY_URL="yoyoociacr.azurecr.io"
+    $USERNAME="yoyoociacr"
+    $IMAGE_NAME="oci-artifacts"
+    $IMAGE_TAG="v1.0"
+    
+    # Log in to ACR
+    docker login $REGISTRY_URL -u $USERNAME -p <password>
+    
+    # Push the OCI artifact
+    oras push $REGISTRY_URL/oci-artifacts:v1.0 oci-artifacts.tar.gz:application/vnd.oci.image.layer.v1.tar+gzip
+    ```  
+
+    Upon successful push, you'll receive a confirmation with the artifact's digest.
 
 ## References
 [^1]:Notary project specification signature verification details. Available at: [signature-verification-details](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/trust-store-trust-policy.md#signature-verification-details).
