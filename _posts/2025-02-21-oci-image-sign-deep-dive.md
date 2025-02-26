@@ -30,12 +30,12 @@ In this blog, I’ll walk you through the process of signing an OCI image and ve
 
 ## Tools & Setup
 The following tools and resources are used to follow along with this blog:
-1. Docker – Installed and running.
-2. Notation CLI – Installed for signing and verifying OCI images.
-3. ORAS CLI – Installed for working with OCI artifacts.
-4. Container Registry – A registry to store and manage signed images. In this blog, I use Azure Container Registry (ACR) with the endpoint `yoyoociacr.azurecr.io`
+1. **Docker** – Installed and running.
+2. **Notation CLI** – Installed for signing and verifying OCI images.
+3. **ORAS CLI** – Installed for working with OCI artifacts.
+4. **Container Registry** – A registry to store and manage signed images. In this blog, I use Azure Container Registry (ACR) with the endpoint `yoyoociacr.azurecr.io`
   ![acr resource screenshot](yoyoociacr-screenshot.png)
-5. OCI Image: A test OCI image pushed to the above container registry. 
+5. **OCI Image**: A test OCI image pushed to the above container registry. 
     ![pushed OCI image](/oci-image-screenshot.png)
     <details>    
     <summary>Click to expand to check the steps to create this image.</summary>
@@ -101,6 +101,42 @@ The following tools and resources are used to follow along with this blog:
     ```  
 
     Upon successful push, you'll receive a confirmation with the artifact's digest.
+
+## OCI Image Signing Steps for Developers
+In this section, we'll walk through the process of signing an OCI image. All the steps are for developers.
+
+### 1. Preparing a Certificate
+To sign an image, a certificate is required. For demonstration purposes, I'll generate a self-signed certificate using the Notation CLI's `notation cert generate-test` command. This command creates a test RSA key and a corresponding self-signed X.509 certificate. It's important to note that this self-signed certificate is intended for testing or development purposes only.
+```powershell
+notation cert generate-test "yoyo-duan.io"
+```
+
+Upon execution, the following output is produced:
+```text
+generating RSA Key with 2048 bits
+generated certificate expiring on 2025-02-09T09:39:09Z
+wrote key: <path-to-the-notation>/localkeys/yoyo-duan.io.key
+wrote certificate: <path-to-the-notation>/notation/localkeys/yoyo-duan.io.crt
+Successfully added yoyo-duan.io.crt to named store yoyo-duan.io of type ca
+yoyo-duan.io: added to the key list
+```
+
+To verify the generated key and certificate, use the command:
+```powershell
+notation key ls
+```
+
+The output will display:
+```text
+NAME             KEY PATH                                            CERTIFICATE PATH
+* yoyo-duan.io   <path-to-the-notation>/localkeys/yoyo-duan.io.key   <path-to-the-notation>/notation/localkeys/yoyo-duan.io.crt
+```
+
+In this output:
+- **KEY PATH**: Indicates the location of the private key file.
+- **CERTIFICATE PATH**: Indicates the location of the public certificate file.
+
+For production environments, it's recommended to use a certificate issued by a trusted Certificate Authority (CA) to ensure security and trustworthiness.
 
 ## References
 [^1]:Notary project specification signature verification details. Available at: [signature-verification-details](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/trust-store-trust-policy.md#signature-verification-details).
