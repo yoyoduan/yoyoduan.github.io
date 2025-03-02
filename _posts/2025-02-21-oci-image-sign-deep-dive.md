@@ -36,7 +36,7 @@ The following tools and resources are used to follow along with this blog:
 4. **Container Registry** – A registry to store and manage signed images. In this blog, I use Azure Container Registry (ACR) with the endpoint `yoyoociacr.azurecr.io`
   ![acr resource screenshot](yoyoociacr-screenshot.png)
 5. **OCI Image**: A test OCI image pushed to the above container registry. 
-    ![pushed OCI image](/oci-image-screenshot.png)
+    ![pushed OCI image](oci-image-screenshot.png)
     <details>    
     <summary>Click to expand to check the steps to create this image.</summary>
     <pre>
@@ -138,5 +138,173 @@ In this output:
 
 For production environments, it's recommended to use a certificate issued by a trusted Certificate Authority (CA) to ensure security and trustworthiness.
 
+### 2. Sign the OCI Image
+#### 2.1 Verify no Existing Signatures
+With the certificate prepared, proceed to sign the OCI image. First, verify if the image has existing signatures:
+Before signing, verify that the image ooes not have any existing signatures:
+```powershll
+$REGISTRY_URL="yoyoociacr.azurecr.io"
+$IMAGE="$REGISTRY_URL/oci-artifacts:v1.0"
+
+notation ls $IMAGE
+```
+
+Expected Output:
+```text
+yoyoociacr.azurecr.io/oci-artifacts@sha256:f17fbc7debc4eda7456dd3ab0c18c27d50821a9821cfca5607404e654f76e675 has no associated signature
+```
+This indicates that there are no signatures associated with the image currently.
+
+#### 2.2 Sign the OCI Image
+Now, sign the OCI image using the previously generated key. We can use the `--key` to specify which one is used to sign the OCI image.
+```powershell
+notation sign $IMAGE --key yoyo-duan.io
+```
+
+Upon successful signing, you'll receive a confirmation message:
+```text
+Successfully signed yoyoociacr.azurecr.io/oci-artifacts@sha256:f17fbc7debc4eda7456dd3ab0c18c27d50821a9821cfca5607404e654f76e675
+```
+
+To confirm the signature has been applied, list the signatures associated with the image:
+```powershell
+notation ls $IMAGE
+```
+
+The output will display the signature details:
+```text
+yoyoociacr.azurecr.io/oci-artifacts@sha256:f17fbc7debc4eda7456dd3ab0c18c27d50821a9821cfca5607404e654f76e675
+└── application/vnd.cncf.notary.signature
+    └── sha256:b3d288872d003b0d31a26522dbf836184f229288b57dff2621f1ee8e48034cd9
+```
+
+#### 2.3 Understanding the Signature
+Notably, the original OCI image digest (sha256:f17fbc7debc4eda7456dd3ab0c18c27d50821a9821cfca5607404e654f76e675) remains unchanged, indicating that the image itself has not been altered. Instead, a new artifact with the media type `application/vnd.cncf.notary.signature` has been associated with the image. This artifact represents the signature.
+
+Let's delve into its the manifest of the signature to understand this association better:
+```powershell
+oras manifest fetch yoyoociacr.azurecr.io/oci-artifacts@sha256:b3d288872d003b0d31a26522dbf836184f229288b57dff2621f1ee8e48034cd9
+```
+
+The output is:
+```json
+{
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "subject": {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:f17fbc7debc4eda7456dd3ab0c18c27d50821a9821cfca5607404e654f76e675",
+        "size": 605
+    },
+    "layers": [
+        {
+            "mediaType": "application/jose+json",
+            "digest": "sha256:cb71e04d24a01cbdabef808730b93e0d642898040158c2528c85194fe4076dff",
+            "size": 2093
+        }
+    ],
+    "config": {
+        "mediaType": "application/vnd.cncf.notary.signature",
+        "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "size": 2
+    },
+    "annotations": {
+        "io.cncf.notary.x509chain.thumbprint#S256": "[\"964fa9b514e84d60d8549743ae6830f7140f81b291f137399a65b860677dcddf\"]",
+        "org.opencontainers.image.created": "2025-02-08T09:41:02Z"
+    }
+}
+```
+
+There are four noticable fields [^2]:
+1. The `subject` field references the manifest of the artifact being signed. It contains the digest of the original OCI image's manifest, indicating which image the signature pertains to. Notably, this association is made by the signature pointing to the original image, rather than the image containing a reference to its signature. This association relationship is showed up in the below graph with dash line arrow from `subject` in the signature manifest to the OCI image manifest.
+
+2. The `config.mediaTyp`e specifies the type of the configuration. In the case of Notary Project signatures, this is set to `application/vnd.cncf.notary.signature`, indicating that the manifest represents a signature. 
+
+3. The `annotations` field is a collection of annotations. A required annotation is `io.cncf.notary.x509chain.thumbprint#S256`, which contains the SHA-256 fingerprints of the signing certificate and its chain. In scenarios where a self-signed certificate is used, this annotation will have a single SHA-256 fingerprint corresponding to that certificate `yoyo-duan.io.crt`. 
+
+4. The `layers` array references the actual signature content, known as the signature envelope. This envelope is stored as a layer with a media type indicating its format, such as `application/jose+json` for JWS (JSON Web Signature) or` application/cose` for COSE (CBOR Object Signing and Encryption). The signature envelope encapsulates the signed data and the signature itself.
+[!notary signature specification](signature-specification.png)
+
+#### 2.4 Deep Dive to the Signature Envelope
+The official definition of signature envelope is that: a standard data structure for creating a signed message. The definition is too general to understand, to comprehend this better, let's fetch the content of the signature envelope in our example.
+
+Though the signature envelope only supports two envelope formats, JWS[^4] and COSE[^5], as they are essentially similar, I will use the `JWS` format for illustration, corresponding to the `application/jose+json` in the output of the manifest in our example `layers[0].mediaType`.
+
+```powershell
+oras blob fetch yoyoociacr.azurecr.io/oci-artifacts@sha256:cb71e04d24a01cbdabef808730b93e0d642898040158c2528c85194fe4076dff  --output signature-envelope.json
+```
+
+The output is stored in a local file called `signature-envelope.json` and its content is in json format:
+```json
+{
+    "payload": "eyJ0YXJnZXRBcnRpZmFjdCI6eyJkaWdlc3QiOiJzaGEyNTY6ZjE3ZmJjN2RlYmM0ZWRhNzQ1NmRkM2FiMGMxOGMyN2Q1MDgyMWE5ODIxY2ZjYTU2MDc0MDRlNjU0Zjc2ZTY3NSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubWFuaWZlc3QudjEranNvbiIsInNpemUiOjYwNX19",
+    "protected": "eyJhbGciOiJQUzI1NiIsImNyaXQiOlsiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1NjaGVtZSJdLCJjdHkiOiJhcHBsaWNhdGlvbi92bmQuY25jZi5ub3RhcnkucGF5bG9hZC52MStqc29uIiwiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1NjaGVtZSI6Im5vdGFyeS54NTA5IiwiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1RpbWUiOiIyMDI1LTAyLTA4VDE3OjQxOjAyKzA4OjAwIn0",
+    "header": {
+        "x5c": [
+            "MIIDSjCCAjKgAwIBAgIBfzANBgkqhkiG9w0BAQsFADBUMQswCQYDVQQGEwJVUzELMAkGA1UECBMCV0ExEDAOBgNVBAcTB1NlYXR0bGUxDzANBgNVBAoTBk5vdGFyeTEVMBMGA1UEAxMMeW95by1kdWFuLmlvMB4XDTI1MDIwODA5MzkwOVoXDTI1MDIwOTA5MzkwOVowVDELMAkGA1UEBhMCVVMxCzAJBgNVBAgTAldBMRAwDgYDVQQHEwdTZWF0dGxlMQ8wDQYDVQQKEwZOb3RhcnkxFTATBgNVBAMTDHlveW8tZHVhbi5pbzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBANu3ZSuxBE2JCktDKhuMOx0lCFEfJmAsIH+rPY2Av9vkNv6b8uAUZIFFXLwoPpRb7xHthCUp6zbTcDUKKdZkR5nhVhcZOJuuCJUyFi6vthDO2B81JQjlLKkrD2HJH8B/GSCjnJvSFnQKpFJbUxKUpTbqgt0VCux5hw6lSroRe7WdDMD7i/8a/e9JxLCNOf4k0bvGEHhpus0GdmF+LKFYeYnyuCB4mQ60rwGay72PSLpsWCHEKEFHQCFzvawq2v4yOYvgugGB4d9CBWI/7iuq82EZnWX3zt1+NjIeUb6GMSJ3OldfejdaOtNusAsJ9Vp+jXlqPdduRVDKpmxnIgTQPzMCAwEAAaMnMCUwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMA0GCSqGSIb3DQEBCwUAA4IBAQAdsM6Q6jlVDyHYEDCv7L0F8pHvAmN1FyBAoieJ9bNssD1ZC9r6jK+6URlwA+C/NUHjBRbGdBGtnI6yENkAjc9WGv/H4TOKwMVUxkQyKp5XsPoCqFdJk/NUjhptlv47NRCXTPkQOjth+mRLgw0nZD9u0dhFXPs4ybWqN4l6Ne5g8IhLSr0VnILgPRR3YI0BK2TIzDKmEQddjEwpPPhks6LZKJ8QvpIFAgT59IgT6KaAbv2KNCfm+M6z5WH9YtLP/7br95JZARjNmqrN80u0lyBYCYECg/Xq9tc0qFLc088E3W6BMz4q7IAp84h+HvbsIWyoD8jpwoGKHqCW/3hnJTxG"
+        ],
+        "io.cncf.notary.signingAgent": "notation-go/1.3.0"
+    },
+    "signature": "1_18FOc2U3efzeoTr6P4XYPd7yf7P649j1XZ4ayUa5ONxVXC4zxXHtQjI5zLqIhtwAfe_RFNRNbVjQ-fsaAtmue9AJxx12QrxuY1btZJ-YFgO_l0ifkUUgP907w4ZjqxwchoYFmrsV34t-0T4G1ULgTjOGEL3hxIyQNjHWkQKEWlZ4_MIESysybilBiBZLe31ccbZc4aNZq9dSKqhNAXKcQIYywyuj4aaiRCnG-SD-56dzGpcEWE7HUKBa4iUe2HyUtp9N4SYOFyQChzH7nYtE_KgQqg6lygEVmuNFbL6tSvrtSq3t2TC6N8PBHYANLTxC9HaMi_FzWpplJvDM2Q8g"
+}
+```
+{: file="signature-envelope.json" }
+
+You can find that a signature envelope comprises of the following four components[^3]:
+1. Payload/Message `payload`: The data that is integrity protected. The value equals to `Base64Url(JWSPayload)>` where the `JWSPayload` is the descriptor of the artifact being signed. As for the value of `JWSPayload`, it is the manifest of the artifact being signed - same to the `subject` of signature manifest- corresponding to the dash arrow from the `payload` to manifest of original OCI image in the above graph.  To validate this, we can decode the Base64Url-encoded payload to retrieve the original JSON descriptor:
+  ```
+  DecodeBase64(payload) =
+  DecodeBase64(eyJ0YXJnZXRBcnRpZmFjdCI6eyJkaWdlc3QiOiJzaGEyNTY6ZjE3ZmJjN2RlYmM0ZWRhNzQ1NmRkM2FiMGMxOGMyN2Q1MDgyMWE5ODIxY2ZjYTU2MDc0MDRlNjU0Zjc2ZTY3NSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubWFuaWZlc3QudjEranNvbiIsInNpemUiOjYwNX19) = 
+  {
+      "targetArtifact": {
+          "digest": "sha256:f17fbc7debc4eda7456dd3ab0c18c27d50821a9821cfca5607404e654f76e675",
+          "mediaType": "application/vnd.oci.image.manifest.v1+json",
+          "size": 605
+      }
+  }
+  ```
+
+2. Signed attributes `protected`: The signature metadata that is integrity protected - e.g. the algorithm used, signature expiration time, creation time, etc. Decoding the Base64Url-encoded protected field reveals a JSON object with these details.
+
+  ```
+  DecodeBase64(protected) =
+  DecodeBase64(eyJhbGciOiJQUzI1NiIsImNyaXQiOlsiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1NjaGVtZSJdLCJjdHkiOiJhcHBsaWNhdGlvbi92bmQuY25jZi5ub3RhcnkucGF5bG9hZC52MStqc29uIiwiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1NjaGVtZSI6Im5vdGFyeS54NTA5IiwiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1RpbWUiOiIyMDI1LTAyLTA4VDE3OjQxOjAyKzA4OjAwIn0) =
+  {
+    "alg": "PS256",
+    "crit": [
+        "io.cncf.notary.signingScheme"
+    ],
+    "cty": "application/vnd.cncf.notary.payload.v1+json",
+    "io.cncf.notary.signingScheme": "notary.x509",
+    "io.cncf.notary.signingTime": "2025-02-08T17:41:02+08:00"
+  }
+  ```
+3. Unsigned attributes `header`: These attributes are not signed by the signing key that generates the signature，e.g. certificate chains signed by a Certificate Authority (CA) or timestamp tokens from a Time Stamping Authority (TSA). These headers provide additional context or verification data but are not integrity-protected by the signature itself.
+
+4. Cryptographic signatures `signature`: This is the actual digital signature computed over the payload and the protected headers.  The signature is generated by signing the ASCII representation of the concatenated Base64Url-encoded protected headers and payload: `Base64Url( sign( ASCII( <Base64Url(ProtectedHeader)>.<Base64Url(JWSPayload)> )))`. 
+
+```json
+{
+    "payload": "<Base64Url(JWSPayload)>",
+    "protected": "<Base64Url(ProtectedHeaders)>",
+    "header": {
+        "io.cncf.notary.timestamp": "<Base64(TimeStampToken)>",
+        "x5c": ["<Base64(DER(leafCert))>", "<Base64(DER(intermediateCACert))>", "<Base64(DER(rootCert))>"]
+    },
+    "signature": "Base64Url( sign( ASCII( <Base64Url(ProtectedHeader)>.<Base64Url(JWSPayload)> )))"  
+}
+```
+
+#### 2.5 Publish the OCI image path and public key
+Woo! We have finished the sign of OCI image. Now what we need to do is let the users know the path of the signed OCI image `yoyoociacr.azurecr.io/oci-artifacts:v1.0` and share the public key `yoyo-duan.io.crt` to your users.
+
+Congratulations on successfully signing your OCI image! Now, it comes the final steps developers need to do to ensure the users can confidently access and verify the authenticity of the signed image:
+1. Share the exact path of signed OCI image: `yoyoociacr.azurecr.io/oci-artifacts:v1.0`.
+2. Distribute the public key `yoyo-duan.io.crt` with the users.
+
 ## References
 [^1]:Notary project specification signature verification details. Available at: [signature-verification-details](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/trust-store-trust-policy.md#signature-verification-details).
+[^2]:Notary Signature Specification Storage. Available at: [signature-specification](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signature-specification.md)
+[^3]:Notary Signature Envelope. Available at: [signature-envelope](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signature-specification.md#signature-envelope)
+[^4]:Signature Envelope JWS. Available at: [signature-envelope-jws](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signature-envelope-jws.md).
+[^5]:Signature Envelope COSE. Available at: [signature-envelope-cose](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signature-envelope-cose.md).
