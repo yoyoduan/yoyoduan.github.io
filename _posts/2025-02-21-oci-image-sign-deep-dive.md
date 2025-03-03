@@ -140,9 +140,9 @@ For production environments, it's recommended to use a certificate issued by a t
 
 ### 2. Sign the OCI Image
 #### 2.1 Verify no Existing Signatures
-With the certificate prepared, proceed to sign the OCI image. First, verify if the image has existing signatures:
-Before signing, verify that the image ooes not have any existing signatures:
-```powershll
+With the certificate prepared, proceed to sign the OCI image. Before signing, verify that the image does not have any existing signatures:
+
+```powershell
 $REGISTRY_URL="yoyoociacr.azurecr.io"
 $IMAGE="$REGISTRY_URL/oci-artifacts:v1.0"
 
@@ -218,20 +218,20 @@ The output is:
 There are four noticable fields [^2]:
 1. The `subject` field references the manifest of the artifact being signed. It contains the digest of the original OCI image's manifest, indicating which image the signature pertains to. Notably, this association is made by the signature pointing to the original image, rather than the image containing a reference to its signature. This association relationship is showed up in the below graph with dash line arrow from `subject` in the signature manifest to the OCI image manifest.
 
-2. The `config.mediaTyp`e specifies the type of the configuration. In the case of Notary Project signatures, this is set to `application/vnd.cncf.notary.signature`, indicating that the manifest represents a signature. 
+2. The `config.mediaType` specifies the type of the configuration. In the case of Notary Project signatures, this is set to `application/vnd.cncf.notary.signature`, indicating that the manifest represents a signature. 
 
 3. The `annotations` field is a collection of annotations. A required annotation is `io.cncf.notary.x509chain.thumbprint#S256`, which contains the SHA-256 fingerprints of the signing certificate and its chain. In scenarios where a self-signed certificate is used, this annotation will have a single SHA-256 fingerprint corresponding to that certificate `yoyo-duan.io.crt`. 
 
-4. The `layers` array references the actual signature content, known as the signature envelope. This envelope is stored as a layer with a media type indicating its format, such as `application/jose+json` for JWS (JSON Web Signature) or` application/cose` for COSE (CBOR Object Signing and Encryption). The signature envelope encapsulates the signed data and the signature itself.
-[!notary signature specification](signature-specification.png)
+4. The `layers` array references the actual signature content, known as the signature envelope. This envelope is stored as a layer with a media type indicating its format, such as `application/jose+json` for JWS (JSON Web Signature) or `application/cose` for COSE (CBOR Object Signing and Encryption). The signature envelope encapsulates the signed data and the signature itself.
+![notary signature specification](signature-specification.png)
 
 #### 2.4 Deep Dive to the Signature Envelope
-The official definition of signature envelope is that: a standard data structure for creating a signed message. The definition is too general to understand, to comprehend this better, let's fetch the content of the signature envelope in our example.
+The official definition of signature envelope is a standard data structure for creating a signed message. However, the definition is too general to understand. To comprehend this better, let's fetch the content of the signature envelope in our example.
 
 Though the signature envelope only supports two envelope formats, JWS[^4] and COSE[^5], as they are essentially similar, I will use the `JWS` format for illustration, corresponding to the `application/jose+json` in the output of the manifest in our example `layers[0].mediaType`.
 
 ```powershell
-oras blob fetch yoyoociacr.azurecr.io/oci-artifacts@sha256:cb71e04d24a01cbdabef808730b93e0d642898040158c2528c85194fe4076dff  --output signature-envelope.json
+oras blob fetch yoyoociacr.azurecr.io/oci-artifacts@sha256:cb71e04d24a01cbdabef808730b93e0d642898040158c2528c85194fe4076dff --output signature-envelope.json
 ```
 
 The output is stored in a local file called `signature-envelope.json` and its content is in json format:
@@ -250,8 +250,21 @@ The output is stored in a local file called `signature-envelope.json` and its co
 ```
 {: file="signature-envelope.json" }
 
-You can find that a signature envelope comprises of the following four components[^3]:
-1. Payload/Message `payload`: The data that is integrity protected. The value equals to `Base64Url(JWSPayload)>` where the `JWSPayload` is the descriptor of the artifact being signed. As for the value of `JWSPayload`, it is the manifest of the artifact being signed - same to the `subject` of signature manifest- corresponding to the dash arrow from the `payload` to manifest of original OCI image in the above graph.  To validate this, we can decode the Base64Url-encoded payload to retrieve the original JSON descriptor:
+You can find that a signature envelope comprises of four components[^3] which values are computed by the following method:
+```yaml
+{
+    "payload": "<Base64Url(JWSPayload)>",
+    "protected": "<Base64Url(ProtectedHeaders)>",
+    "header": {
+        "io.cncf.notary.timestamp": "<Base64(TimeStampToken)>",
+        "x5c": ["<Base64(DER(leafCert))>", "<Base64(DER(intermediateCACert))>", "<Base64(DER(rootCert))>"]
+        # more...
+    },
+    "signature": "Base64Url( sign( ASCII( <Base64Url(ProtectedHeader)>.<Base64Url(JWSPayload)> )))"  
+}
+```
+
+1. Payload/Message `payload`: the data that is integrity protected. The value equals to `Base64Url(JWSPayload)>`. As for the value of `JWSPayload`, it is the manifest of the artifact being signed - same to the `subject` of signature manifest- corresponding to the dash arrow from the `payload` to manifest of original OCI image in the above graph. To validate this, we can decode the Base64Url-encoded `payload` to retrieve the original JSON descriptor:
   ```
   DecodeBase64(payload) =
   DecodeBase64(eyJ0YXJnZXRBcnRpZmFjdCI6eyJkaWdlc3QiOiJzaGEyNTY6ZjE3ZmJjN2RlYmM0ZWRhNzQ1NmRkM2FiMGMxOGMyN2Q1MDgyMWE5ODIxY2ZjYTU2MDc0MDRlNjU0Zjc2ZTY3NSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubWFuaWZlc3QudjEranNvbiIsInNpemUiOjYwNX19) = 
@@ -264,41 +277,29 @@ You can find that a signature envelope comprises of the following four component
   }
   ```
 
-2. Signed attributes `protected`: The signature metadata that is integrity protected - e.g. the algorithm used, signature expiration time, creation time, etc. Decoding the Base64Url-encoded protected field reveals a JSON object with these details.
-
+1. Signed attributes `protected`: the signature metadata that is integrity protected - e.g. the algorithm used, signature expiration time, creation time and etc. Decoding the Base64Url-encoded protected field reveals a JSON object with these details:
   ```
   DecodeBase64(protected) =
   DecodeBase64(eyJhbGciOiJQUzI1NiIsImNyaXQiOlsiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1NjaGVtZSJdLCJjdHkiOiJhcHBsaWNhdGlvbi92bmQuY25jZi5ub3RhcnkucGF5bG9hZC52MStqc29uIiwiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1NjaGVtZSI6Im5vdGFyeS54NTA5IiwiaW8uY25jZi5ub3Rhcnkuc2lnbmluZ1RpbWUiOiIyMDI1LTAyLTA4VDE3OjQxOjAyKzA4OjAwIn0) =
   {
-    "alg": "PS256",
-    "crit": [
-        "io.cncf.notary.signingScheme"
-    ],
-    "cty": "application/vnd.cncf.notary.payload.v1+json",
-    "io.cncf.notary.signingScheme": "notary.x509",
-    "io.cncf.notary.signingTime": "2025-02-08T17:41:02+08:00"
+      "alg": "PS256",
+      "crit": [
+          "io.cncf.notary.signingScheme"
+      ],
+      "cty": "application/vnd.cncf.notary.payload.v1+json",
+      "io.cncf.notary.signingScheme": "notary.x509",
+      "io.cncf.notary.signingTime": "2025-02-08T17:41:02+08:00"
   }
   ```
-3. Unsigned attributes `header`: These attributes are not signed by the signing key that generates the signature，e.g. certificate chains signed by a Certificate Authority (CA) or timestamp tokens from a Time Stamping Authority (TSA). These headers provide additional context or verification data but are not integrity-protected by the signature itself.
 
-4. Cryptographic signatures `signature`: This is the actual digital signature computed over the payload and the protected headers.  The signature is generated by signing the ASCII representation of the concatenated Base64Url-encoded protected headers and payload: `Base64Url( sign( ASCII( <Base64Url(ProtectedHeader)>.<Base64Url(JWSPayload)> )))`. 
+1. Unsigned attributes `header`: these attributes are not signed by the signing key that generates the signature, e.g. certificate chains signed by a Certificate Authority (CA) or timestamp tokens from a Time Stamping Authority (TSA). These headers provide additional context or verification data but are not integrity-protected by the signature itself.
 
-```json
-{
-    "payload": "<Base64Url(JWSPayload)>",
-    "protected": "<Base64Url(ProtectedHeaders)>",
-    "header": {
-        "io.cncf.notary.timestamp": "<Base64(TimeStampToken)>",
-        "x5c": ["<Base64(DER(leafCert))>", "<Base64(DER(intermediateCACert))>", "<Base64(DER(rootCert))>"]
-    },
-    "signature": "Base64Url( sign( ASCII( <Base64Url(ProtectedHeader)>.<Base64Url(JWSPayload)> )))"  
-}
-```
+2. Cryptographic signatures `signature`: this is the actual digital signature computed over the payload and the protected headers.  The signature is generated by signing the ASCII representation of the concatenated Base64Url-encoded protected headers and payload: `Base64Url( sign( ASCII( <Base64Url(ProtectedHeader)>.<Base64Url(JWSPayload)> )))`. 
 
-#### 2.5 Publish the OCI image path and public key
-Woo! We have finished the sign of OCI image. Now what we need to do is let the users know the path of the signed OCI image `yoyoociacr.azurecr.io/oci-artifacts:v1.0` and share the public key `yoyo-duan.io.crt` to your users.
+### 3. Publish the OCI Image Path and Public Key
+Congratulations on successfully signing your OCI image! 
 
-Congratulations on successfully signing your OCI image! Now, it comes the final steps developers need to do to ensure the users can confidently access and verify the authenticity of the signed image:
+Now, it comes the final steps developers need to do to ensure the users can confidently access and verify the authenticity of the signed image:
 1. Share the exact path of signed OCI image: `yoyoociacr.azurecr.io/oci-artifacts:v1.0`.
 2. Distribute the public key `yoyo-duan.io.crt` with the users.
 
