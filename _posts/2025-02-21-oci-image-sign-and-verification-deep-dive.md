@@ -1,5 +1,5 @@
 ---
-title: OCI Image Sign Deep Dive
+title: OCI Image Sign and Verification Deep Dive
 date: 2025-02-21 18:38:00 +0800
 description: The blog is to describe what happens behind the scenes when signing and verifying an OCI image.
 categories: [Blogging, OCI]
