@@ -303,9 +303,154 @@ Now, it comes the final steps developers need to do to ensure the users can conf
 1. Share the exact path of signed OCI image: `yoyoociacr.azurecr.io/oci-artifacts:v1.0`.
 2. Distribute the public key `yoyo-duan.io.crt` with the users.
 
+## OCI Image Signuatre Verification Steps for Users
+The verification process with the Notation CLI is straightforward:
+```powershell
+notation verify yoyoociacr.azurecr.io/oci-artifacts:v1.0
+```
+
+You might wonder why the certificate for verification isn't specified directly in this command. This is because the Notation CLI references a pre-configured trust store and trust policies to determine which certificates to use during the verification process. 
+
+In the next sections, I will explain what trust store and trust policies are and what happened behind the scene when verifying.
+
+### 1. Import the Public Key into the Trust Store
+In the Notary Project ecosystem, an OCI image's signature is considered valid only if its signing certificate's root CA is included in the trust store. But what exactly is a trust store?
+
+A trust store contains a set of trusted identities from which trust is derived for the system[^6]. For example, it includes trusted root CA certificates for X.509 Public Key Infrastructure.
+
+The Notary Project represents the trust store using the following directory structure:
+```
+$XDG_CONFIG_HOME/notation/trust-store/
+└── x509/
+    ├── ca/
+    │   ├── ca-named-store1/
+    │   │   └── ca-named-store1-cert.crt
+    │   ├── ca-named-store2/
+    │   │   └── ca-named-store2-cert.pem
+    │   └── ...
+    ├── signingAuthority/
+    │   ├── sa-named-store/
+    │   │   └── sa-named-store-cert.pem
+    │   └── ...
+    └── tsa/
+        ├── tsa-named-store/
+        │   └── tsa-cert1.pem
+        └── ...
+```
+
+In this structure:
+- `ca/`: Contains Certificate Authority (CA) root certificates.
+- `signingAuthority/`: Contains Signing Authority's root certificates.
+- `tsa/`: Contains Time Stamping Authority (TSA) root certificates.
+
+Each subdirectory under these categories is referred to as a "named store", housing one or more trusted certificates. The name of each subdirectory is used to reference the specific named store.
+
+To validate the signature of `yoyoociacr.azurecr.io/oci-artifacts:v1.0`, users need to add the developer's distributed public key, `yoyo-duan.io.crt`, to your trust store under the ca type. 
+```powershell
+notation cert add --type ca --store yoyo-duan.io yoyo-duan.io.crt
+```
+This command adds the `yoyo-duan.io.crt` certificate to a named store called `yoyo-duan.io` within the `ca` directory of your trust store.
+
+You can verify the addition by listing all trusted certificates along with their store types and names:
+```powershell
+notation cert ls
+```
+
+The output should resemble:
+```
+STORE TYPE   STORE NAME     CERTIFICATE
+ca           yoyo-duan.io   yoyo-duan.io.crt
+```
+
+### 2. Create the Trust Policy
+With multiple trusted certificates in the trust store, it's essential to specify which named store should be used when verifying a particular image. In the Notary Project, this specification is achieved through the trust policy.
+
+A trust policy is a configuration that indicates which identities are trusted to produce artifacts[^7]. To create a trust policy for validating `yoyoociacr.azurecr.io/oci-artifacts:v1.0`, follow these steps:
+1. Prepare `a trustpolicy.json` File: This file should adhere to the trust policy specification and define the verification rules for the target image.
+    ```yaml
+    {
+        "version": "1.0",
+        "trustPolicies": [
+            {
+                "name": "oci-images-policy",
+                "registryScopes": [
+                    "yoyoociacr.azurecr.io/oci-artifacts"
+                ],
+                "signatureVerification": {
+                    "level": "strict"
+                },
+                "trustStores": [
+                    "ca:yoyo-duan.io"
+                ],
+                "trustedIdentities": [
+                    "*"
+                ]
+            }
+        ]
+    }
+    ```
+    In this configuration:
+    - `name`: The name of the policy.
+    - `registryScopes`: Specifies the registry artifacts to which the policy applies.
+    - `signatureVerification.level`: Defines the verification level (strict, permissive, audit, or skip).
+    - `trustStores`: Lists the trust stores containing the trusted root certificates.
+    - `trustedIdentities`: Specifies the identities trusted to sign the artifact.
+
+    This policy indicates that for images under the registry `yoyoociacr.azurecr.io`  with the path `/oci-artifacts`, the notation CLI will use the certificates with any trusted identities(`*`) in the `ca:yoyo-duan.io` named store to verify the signature.
+
+    *For more details of Trust policy specification fields, you can go to the reference[^7].*
+
+2. Import the trust policy: Use the following command to import the trust policy:
+    ```powershell
+    notation policy import ./trustpolicy.json
+    ```
+    This command configures the notation CLI to apply the specified trust policy during the verification process.
+
+### 3. Verify the Signature
+Now, users can run the command to verify the signature:
+```powershell
+notation verify yoyoociacr.azurecr.io/oci-artifacts:v1.0
+```
+
+The output should resemble:
+```text
+Successfully verified signature for yoyoociacr.azurecr.io/oci-artifacts@sha256:f17fbc7debc4eda7456dd3ab0c18c27d50821a9821cfca5607404e654f76e675
+```
+
+## [Optional] Copy the Signed OCI Image to Another Container Registry
+Users often need to copy OCI images to their own container registries. The oras CLI facilitates this process.
+
+However, a standard copy command like the following copies only the image without its associated signature.
+
+```powershell
+oras copy yoyoociacr.azurecr.io/oci-artifacts:v1.0 yoyoociacrbackup.azurecr.io/oci-artifacts:v1.0
+```
+
+To include the image's signature in the copy, you need to copy all its referrers as well. Use the following command to copy the image along with its referrers:
+```powershell
+oras copy -r --to-oci-layout yoyoociacr.azurecr.io/oci-artifacts:v1.0 yoyoociacrbackup.azurecr.io/oci-artifacts:v1.0
+```
+The `-r` flag ensures that all artifacts associated with the image are copied to the target registry
+
+## Summary
+Congratulations! You are now the expert of the process of signing and verifying OCI images using Notation! Here's a concise summary:
+
+**Image Signing Process:**
+1. Prepare a certificate with public and private keys.
+2. Sign the image with the certificate.
+
+**Image Signature Verification Process:**
+1. Import the public certificate into the trust store.
+2. Define a trust policy with the named store.
+3. Verify the image signature against the trust policy
+
+By following these steps, you can confidently sign and verify OCI images, enhancing the security of your containerized applications.
+
 ## References
 [^1]:Notary project specification signature verification details. Available at: [signature-verification-details](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/trust-store-trust-policy.md#signature-verification-details).
 [^2]:Notary Signature Specification Storage. Available at: [signature-specification](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signature-specification.md)
 [^3]:Notary Signature Envelope. Available at: [signature-envelope](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signature-specification.md#signature-envelope)
 [^4]:Signature Envelope JWS. Available at: [signature-envelope-jws](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signature-envelope-jws.md).
 [^5]:Signature Envelope COSE. Available at: [signature-envelope-cose](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signature-envelope-cose.md).
+[^6]:Trust Store. Available at: [trust-store](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/trust-store-trust-policy.md#trust-store).
+[^7]:Trust Policy. Available at: [trust-policy](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/trust-store-trust-policy.md#trust-policy).
