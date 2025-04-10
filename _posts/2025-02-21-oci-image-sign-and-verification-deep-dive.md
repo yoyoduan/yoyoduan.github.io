@@ -92,9 +92,10 @@ The following tools and resources are used to follow along with this blog:
     $USERNAME="yoyoociacr"
     $IMAGE_NAME="oci-artifacts"
     $IMAGE_TAG="v1.0"
+    $PASSWORD="input your password"
     
     # Log in to ACR
-    docker login $REGISTRY_URL -u $USERNAME -p <password>
+    docker login $REGISTRY_URL -u $USERNAME -p $PASSWORD
     
     # Push the OCI artifact
     oras push $REGISTRY_URL/oci-artifacts:v1.0 oci-artifacts.tar.gz:application/vnd.oci.image.layer.v1.tar+gzip
