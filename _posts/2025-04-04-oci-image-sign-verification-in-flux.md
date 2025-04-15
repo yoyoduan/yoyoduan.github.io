@@ -13,8 +13,22 @@ Flux enables continuous deployment of Kubernetes resources from sources like OCI
 ## Tools & Setup
 To follow along with this guide, you'll need:
 1. **Docker** – Installed and running.
-2. **A Kubernetes Cluster with Flux installed**
-  <details>  
+2. **A signed OCI image in a container registry** -  If you're unfamiliar with how to sign an OCI image, check out my other blog post: [OCI Image Sign and Verification Deep Dive]({% post_url 2025-02-21-oci-image-sign-and-verification-deep-dive %}).
+    You can verify the signature with the following command:
+    ```powershell
+    notation ls yoyoociacr.azurecr.io/oci-artifacts:v1.0
+    ```
+    Sample output:
+    ```text
+    yoyoociacr.azurecr.io/oci-artifacts@sha256:e8dc5898b69f8b3786055325edbff66050f21e91fbed5db3d2e8147939fca213
+    └── application/vnd.cncf.notary.signature
+        └── sha256:b0965724d993c0bfe4149226d6d509ec7d260de78dc4431769b3bbfc72c0feac
+    ```
+    ![signed OCI image](signed-oci-image.png)
+
+3. **A Kubernetes Cluster with Flux installed**
+  ![AKS cluster with Flux extension](aks-cluster-with-flux.png)
+    <details>
     <summary>Click to expand the steps to setup Flux on an Azure Kubernetes(AKS) cluster.</summary>
     <pre>
     a. Enable the Flux Extension on the AKS Cluster
@@ -120,74 +134,8 @@ To follow along with this guide, you'll need:
     #         azure.workload.identity/use: "true"
     ```
 
-    b. If your signed OCI image is saved in an Azure Container Registry, you should grant ImagePull access to an User Assigned Identity(MSI) and then bind the MSI to the OCI source controller.
-    
-    Firstly, enable the Azure Workload Identity feature for the target AKS cluster
-    ```
-    # Check if the Azure Workload Identity feature is enabled. 
-    az aks show -n yoyo-aks-cluster -g aks-cluster --query "oidcIssuerProfile.issuerUrl" -o tsv
-
-    # If it returns a URL, you’re good. If not, you need to enable OIDC and workload identity:
-    az aks update -n yoyo-aks-cluster -g aks-cluster --enable-oidc-issuer --enable-workload-identity
-    ```
-
-    Then create a MSI and grant the the target ACR ImagePull access to this MSI
-    ```
-    az identity create --name flux-source-controller-msi --resource-group aks-cluster --location eastus
-
-    $CLIENT_ID = az identity show --name flux-source-controller-msi --resource-group aks-cluster --query "clientId" -o tsv
-    ```
-
-    Next, grant the target ACR ImagePull access to this MSI to the AKS cluster scope:
-    ```
-    $SCOPE = az acr show --name yoyoociacr --query id --output tsv
-    az role assignment create --assignee $CLIENT_ID --role AcrPull --scope $SCOPE
-    ```
-
-    Now, the MSI must be federated with the AKS OIDC provider before usage. The value of `subject` points to the service account of the Flux source controller.
-    ```
-    $ISSUER_URL = az aks show -n yoyo-aks-cluster -g aks-cluster --query "oidcIssuerProfile.issuerUrl" -o tsv
-    az identity federated-credential create --name flux-source-controller-binding --identity-name flux-source-controller-msi --resource-group aks-cluster --issuer $ISSUER_URL --subject system:serviceaccount:flux-system:source-controller --audience api://AzureADTokenExchange
-    ```
-
-    Finally, patch MSI as workload identity to the Flux source controller's service account and deployment:
-    ```
-    kubectl patch serviceaccount source-controller -n flux-system --patch-file source-contoller-patch-service-account.yaml --type merge
-    # source-contoller-patch-service-account.yaml
-    # metadata:
-    #   annotations:
-    #     azure.workload.identity/client-id: # replace the $CLIENT_ID of the MSI in this field
-    #   labels:
-    #     azure.workload.identity/use: "true"
-
-    kubectl patch deployment source-controller -n flux-system --patch-file source-contoller-patch-deployment.yaml --type merge
-    # source-contoller-patch-deployment.yaml
-    # metadata:
-    #   labels:
-    #     azure.workload.identity/use: "true"
-    # spec:
-    #   template:
-    #     metadata:
-    #       labels:
-    #         azure.workload.identity/use: "true"
-    ```
-  ![AKS cluster with Flux extension](aks-cluster-with-flux.png)
-
-1. **A signed OCI image  in a container registry** -  If you're unfamiliar with how to sign an OCI image, check out my other blog post: [OCI Image Sign and Verification Deep Dive]({% post_url 2025-02-21-oci-image-sign-and-verification-deep-dive %}).
-    You can verify the signature with the following command:
-    ```powershell
-    notation ls yoyoociacr.azurecr.io/oci-artifacts:v1.0
-    ```
-    Sample output:
-    ```text
-    yoyoociacr.azurecr.io/oci-artifacts@sha256:e8dc5898b69f8b3786055325edbff66050f21e91fbed5db3d2e8147939fca213
-    └── application/vnd.cncf.notary.signature
-        └── sha256:b0965724d993c0bfe4149226d6d509ec7d260de78dc4431769b3bbfc72c0feac
-    ```
-    ![signed OCI image](signed-oci-image.png)
-
 ## References
-[^1]:Flux introduction. Available at: [flux-documentation](https://fluxcd.io/flux/).
+[^1]: Flux introduction. Available at: [flux-documentation](https://fluxcd.io/flux/).
 
 # Trust Stores in the Flux
 No trust store needed when verification. Instead, 
