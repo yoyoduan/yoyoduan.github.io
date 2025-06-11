@@ -1,7 +1,7 @@
 ---
-title: Learning Kubernetes by Building a Personal Blog Site
+title: Learning Kubernetes by Building a Personal Blog Site — Introduction
 date: 2025-06-10 16:26:00 +0800
-description: The blog is to introduce a series blogs which is to guide how to build a personal blog site and deploy it on the Kubernetes cluster.
+description: This post is the introduction to a hands-on blog series where we’ll build something real together while learning Kubernetes concepts along the way.
 categories: [Kubernetes, Docker]
 tags: [kubernetes, docker]
 mermaid: true
@@ -22,7 +22,7 @@ In this series, we’ll go step by step to build and deploy a personal blog site
 * You’re a developer with some development experience
 * You prefer learning through concrete, hands-on examples rather than theory
 
-## What will we build?
+## Series Overview: What We'll Build Together
 Here’s the roadmap:
 
 ```mermaid
@@ -51,3 +51,6 @@ I also want to encourage you—even if you're not an expert—to share what you 
 Of course, this blog series won't cover every corner of Kubernetes. But if it helps you understand even one concept more clearly, that would truly be my honor.
 
 Mistakes are inevitable, and I warmly welcome your feedback. Please don’t hesitate to point them out and help improve the content.
+
+## Next Steps
+So if you're ready, let's dive into the first post in the series: [Learning Kubernetes by Building a Blog Site (Part 1): Setup a Blog Site Locally](#WIP)
