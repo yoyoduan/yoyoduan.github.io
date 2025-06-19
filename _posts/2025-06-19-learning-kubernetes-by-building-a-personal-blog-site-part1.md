@@ -38,6 +38,8 @@ Think of any application setup as needing three parts:
 
 Let’s walk through each step.
 
+---
+
 ### Step 1: Install the Runtime Environment (Linux Only)
 
 I’m using Ubuntu, so I’ll show the setup steps for Linux. If you're using Windows or macOS, check [Jekyll's installation guide](https://jekyllrb.com/docs/installation/).
@@ -49,12 +51,12 @@ sudo apt install -y nodejs
 ```
 
 This installs:
-* Ruby – Jekyll is a Ruby program, so this is essential. This comes from the `ruby-full`.
-* Gem –  The Ruby package manager, used to install Ruby packages, called **gems**. It’s included in `ruby-full` as well.
-* Node.js – Required by the Jekyll Chirpy theme to support features like search and dark mode. Obviously, this comes from the `nodejs`.
-* Other prerequisites build tools: `build-essential` and `zlib1g-dev`. These are needed to compile certain Ruby gems. Honestly, I don’t fully understand what they do either — and that’s okay. You can still follow this guide without knowing the details.
+* **Ruby** – Jekyll is a Ruby program, so this is essential. This comes from the `ruby-full`.
+* **Gem** – The Ruby package manager, used to install Ruby packages called **gems**. It’s included in `ruby-full` as well.
+* **Node.js** – Required by the Jekyll Chirpy theme to support features like search and dark mode. This comes from the `nodejs`.
+* **Other prerequisite build tools**: `build-essential` and `zlib1g-dev`. These are needed to compile certain Ruby gems. Honestly, I don’t fully understand what they do either — and that’s okay. You can still follow this guide without knowing the details.
 
-Now, install the required gems-Jekyll and Bundler:
+Now, install the required gems — Jekyll and Bundler:
 
 ```bash
 echo '# Install Ruby Gems to ~/gems' >> ~/.bashrc
@@ -64,38 +66,45 @@ source ~/.bashrc
 
 gem install jekyll bundler
 ```
+
 > 📝 **What do the first four commands do?**
 >
 > These lines:
-> - Set an environment variable `GEM_HOME`. The `GEM_HOME` tells Ruby to install gems into `~/gems`, a folder in your home directory where you always have write access.
-> - Add `$HOME/gems/bin` to your system `PATH`, so you can run installed gems like `jekyll` or `bundler` directly from the command line — without needing to specify their full path (e.g., from `~/gems/bin/bundler ...other-arguments` to simply `bundler ...other-arguments`).
-> - Save these settings in your `.bashrc` file, so they persist across terminal sessions.
+>
+> * Set an environment variable `GEM_HOME`. This tells Ruby to install gems into `~/gems`, a folder in your home directory where you always have write access.
+> * Add `$HOME/gems/bin` to your system `PATH`, so you can run installed gems like `jekyll` or `bundler` directly from the command line — without needing to specify their full path (e.g., from `~/gems/bin/bundler` to simply `bundler`).
+> * Save these settings in your `.bashrc` file so they persist across terminal sessions.
 
 > 💡 **Why not just use `sudo gem install`?**
 >
-> By default, Ruby tries to install gems system-wide, which often requires `sudo` and can cause permission issues or conflicts with system-level packages. It’s safer to install them locally in your home directory(`~/gems`), where you always have write access.
+> By default, Ruby tries to install gems system-wide, which often requires `sudo` and can cause permission issues or conflicts with system-level packages. It’s safer to install them locally in your home directory (`~/gems`), where you always have write access.
 
 > 🔧 **What’s Bundler?**
 >
 > Bundler manages Ruby dependencies. It makes sure you have the right versions of gems installed, helping avoid compatibility issues during builds.
 
+---
+
 ### Step 2: Get Your Blog Project Source Code from GitHub
 1. Fork the [chirpy-starter](https://github.com/cotes2020/chirpy-starter) repository to your own GitHub account. This is the template we'll use to build your blog.
-2. Name the forked repository as `<your-username>.github.io`. 
-    This is required if you want to host it using GitHub Pages. After deployment, your blog site will be publicly accessible at `https://<your-username>.github.io`.
+2. Name the forked repository `<your-username>.github.io`.
+   This is required if you want to host it using GitHub Pages. After deployment, your blog site will be publicly accessible at `https://<your-username>.github.io`.
 3. Clone the repo to your local computer:
-    ```bash
-    cd <your-project-folder>
-    git clone https://github.com/<your-username>/<your-username>.github.io.git
-    ```
+   ```bash
+   cd <your-project-folder>
+   git clone https://github.com/<your-username>/<your-username>.github.io.git
+   ```
 
-    Example:
-    ```bash
-    git clone https://github.com/yoyoduan/yoyoduan.github.io.git
-    ```
+   Example:
+
+   ```bash
+   git clone https://github.com/yoyoduan/yoyoduan.github.io.git
+   ```
+
+---
 
 ### Step 3: Install Project Dependencies
-The Chirpy theme requires some additional gems to work properly. These are listed in a file named `Gemfile` in the root of your project repository— think of it as a "shopping list" of required gems.
+The Chirpy theme requires some additional gems to work properly. These are listed in a file named `Gemfile` in the root of your project repository — think of it as a "shopping list" of required gems.
 
 To install them, navigate to your project folder and run:
 ```bash
@@ -103,8 +112,8 @@ bundle
 ```
 
 This command will:
-- Install all the gems listed in the Gemfile
-- Automatically install any sub-dependencies those gems require
+* Install all the gems listed in the `Gemfile`
+* Automatically install any sub-dependencies those gems require
 
 ---
 
@@ -114,11 +123,14 @@ Everything is ready now — let’s start the blog server and see it in action! 
 bundle exec jekyll serve
 ```
 
-After a few seconds, you’ll see your blog running at http://127.0.0.1:4000:
+After a few seconds, you’ll see your blog running at [http://127.0.0.1:4000](http://127.0.0.1:4000):
 
 ![screenshot-local-blog-site](screenshot-local-blog-site.png)
 
+---
+
 ### Add Your First Blog Post
+
 Want to write your first post? Just create a new `.md` file (a Markdown file) under the `_posts/` directory. Here’s a simple example:
 
 ```markdown
@@ -146,7 +158,7 @@ Now refresh your browser — you should see the new post on the homepage. Click 
 ## (Optional) Deploy to GitHub Pages
 Seeing your blog locally is fun — but what if you want to share it with the world?
 
-GitHub Pages lets you host static websites for **free**! Just push your latest change to GitHub, and your blog will be live at `https://<your-username>.github.io`. Make sure your repository name is `<your-username>.github.io` exactly.
+GitHub Pages lets you host static websites for **free**! Just push your latest change to GitHub, and your blog will be live at `https://<your-username>.github.io`. Make sure your repository name is **exactly** `<your-username>.github.io`.
 
 ```bash
 git add .
@@ -156,9 +168,9 @@ git push origin main
 
 Then:
 
-1. Go to your repo on GitHub → **Settings**.
-2. Click **Pages** in the sidebar.
-3. Under "GitHub Pages", click **Visit site**.
+1. Go to your repo on GitHub → **Settings**
+2. Click **Pages** in the sidebar
+3. Under "GitHub Pages", click **Visit site**
 
 > ⏳ It might take a few minutes before your blog appears. Be patient!
 
@@ -172,6 +184,6 @@ Then:
 
 Now that your blog is up and running, you're ready for the next phase — **containerizing** it with Docker.
 
-Don't know what is containerizing? I will explain it in details in the next post, but I can give you a short introduction to it here as a preview. This is a as a way to "package" your blog site into a single, portable unit which can deployed. This will help us run the blog anywhere — including inside a Kubernetes cluster.
+Not sure what "containerizing" means? I’ll explain it in detail in the next post. But here's a quick preview: it's a way to "package" your blog site into a single, portable unit that can be deployed anywhere. This will help us run the blog not only on your local machine, but also inside a Kubernetes cluster.
 
-Now it is the time to continue to [Part 2: Using Docker to Simplify Setup](#To-do) →
+Ready to continue? Let’s go to [Part 2: Using Docker to Simplify Setup](#To-do) →
