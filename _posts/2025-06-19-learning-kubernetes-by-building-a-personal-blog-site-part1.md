@@ -1,5 +1,5 @@
 ---
-title: Learning Kubernetes by Building a Personal Blog Site — Part 1: Set Up a Blog Site Locally
+title: Learning Kubernetes by Building a Personal Blog Site — Part 1 Set Up a Blog Site Locally
 date: 2025-06-19 19:19:00 +0800
 description: The blog is walk through how to set up a blog site locally.
 categories: [Kubernetes, Docker]
@@ -87,19 +87,18 @@ gem install jekyll bundler
 
 ### Step 2: Get Your Blog Project Source Code from GitHub
 1. Fork the [chirpy-starter](https://github.com/cotes2020/chirpy-starter) repository to your own GitHub account. This is the template we'll use to build your blog.
-2. Name the forked repository `<your-username>.github.io`.
-   This is required if you want to host it using GitHub Pages. After deployment, your blog site will be publicly accessible at `https://<your-username>.github.io`.
+2. Name the forked repository as `<your-username>.github.io`.
+    This is required if you want to host it using GitHub Pages. After deployment, your blog site will be publicly accessible at `https://<your-username>.github.io`.
 3. Clone the repo to your local computer:
-   ```bash
-   cd <your-project-folder>
-   git clone https://github.com/<your-username>/<your-username>.github.io.git
-   ```
+    ```bash
+    cd <your-project-folder>
+    git clone https://github.com/<your-username>/<your-username>.github.io.git
+    ```
 
-   Example:
-
-   ```bash
-   git clone https://github.com/yoyoduan/yoyoduan.github.io.git
-   ```
+    Example:
+    ```bash
+    git clone https://github.com/yoyoduan/yoyoduan.github.io.git
+    ```
 
 ---
 
@@ -123,15 +122,12 @@ Everything is ready now — let’s start the blog server and see it in action! 
 bundle exec jekyll serve
 ```
 
-After a few seconds, you’ll see your blog running at [http://127.0.0.1:4000](http://127.0.0.1:4000):
+After a few seconds, you’ll see your blog running at [http://127.0.0.1:4000](http://127.0.0.1:4000). Currently, no blogs show up as no posts in the repository.
 
 ![screenshot-local-blog-site](screenshot-local-blog-site.png)
 
----
-
 ### Add Your First Blog Post
-
-Want to write your first post? Just create a new `.md` file (a Markdown file) under the `_posts/` directory. Here’s a simple example:
+Want to write your first post? Just create a new Markdown file following the naming convention `YEAR-MONTH-DAY-title.md` under the `_posts/` directory, for example, `2025-06-17-my-first-blog.md`. Here’s a simple example:
 
 ```markdown
 ---
@@ -146,7 +142,9 @@ tags: [jekyll]
 My first blog!
 ```
 
-> The block at the top (`---`) is called **front matter**. It tells Jekyll about the post’s metadata, like the title and date. It won’t appear on the page, but Jekyll needs it to build the post properly.
+> 📝 The block at the top (`---`) is called **front matter**. It tells Jekyll about the post’s metadata, like the title and date. It won’t appear on the page, but Jekyll needs it to build the post properly.
+
+> ⚠️ The Markdown file name must follow the format `YEAR-MONTH-DAY-title.md`, or the post will not appear on the site. Also, if the date is set in the future, the post will not show up until that date arrives.
 
 Now refresh your browser — you should see the new post on the homepage. Click it to read your content!
 
@@ -176,7 +174,6 @@ Then:
 
 ![GitHub Pages Settings](github-pages.png)
 ![Visit site](github-pages2.png)
-![Live blog](github-pages3.png)
 
 ---
 
